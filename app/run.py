@@ -1,7 +1,6 @@
 import json
 import plotly
 import pandas as pd
-import pickle
 
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
@@ -16,12 +15,6 @@ from sqlalchemy import create_engine
 app = Flask(__name__)
 
 def tokenize(text):
-    '''
-    INPUT 
-        text: Text to be processed   
-    OUTPUT
-        Returns a processed text variable that was tokenized, lower cased, stripped, and lemmatized
-    '''
     tokens = word_tokenize(text)
     lemmatizer = WordNetLemmatizer()
 
@@ -34,22 +27,11 @@ def tokenize(text):
 
 # load data
 engine = create_engine('sqlite:///../data/DisasterResponse.db')
-df =  pd.read_sql_table('DisasterResponse', engine)
-
-print(df.head())
+df = pd.read_sql_table('Disasters', engine)
 
 # load model
-model = pickle.load(open("../models/classifier.pkl", 'rb'))
-print(model)
+model = joblib.load("../models/classifier.pkl")
 
-X = df.message.values
-y = df.iloc[:,5:]
-
-keys = list(y.columns)
-my_dict = {key: None for key in keys}
-
-for key, value in my_dict.items():
-    my_dict[key] = ((y[key] == 1)).sum()
 
 # index webpage displays cool visuals and receives user input text for model
 @app.route('/')
@@ -59,12 +41,13 @@ def index():
     # extract data needed for visuals
     genre_counts = df.groupby('genre').count()['message']
     genre_names = list(genre_counts.index)
-
-    ### data for visualizing category counts.
-    label_sums = df.iloc[:, 4:].sum()
-    label_names = list(label_sums.index)
-
+    cats = df[df.columns[5:]]
+    cats_counts = cats.mean()*cats.shape[0]
+    cats_names = list(cats_counts.index)
+    nlarge_counts = cats_counts.nlargest(5)
+    nlarge_names = list(nlarge_counts.index)
     # create visuals
+
     graphs = [
         {
             'data': [
@@ -87,23 +70,43 @@ def index():
         {
             'data': [
                 Bar(
-                    x=label_names,
-                    y=label_sums,
+                    x=nlarge_names,
+                    y=nlarge_counts
                 )
             ],
 
             'layout': {
-                'title': 'Distribution of categories',
+                'title': 'Top message categories',
                 'yaxis': {
                     'title': "Count"
                 },
                 'xaxis': {
+                    'title': "Category"
+                }
+            }
+        },
+        {
+            'data': [
+                Bar(
+                    x=cats_names,
+                    y=cats_counts
+                )
+            ],
 
+            'layout': {
+                'title': 'Distribution of Message categories',
+                'yaxis': {
+                    'title': "Count"
                 },
+                'xaxis': {
+                    'title': "Category"
+                }
             }
         }
-
-]
+        
+    ]
+    
+    
     
     # encode plotly graphs in JSON
     ids = ["graph-{}".format(i) for i, _ in enumerate(graphs)]
@@ -111,6 +114,7 @@ def index():
     
     # render web page with plotly graphs
     return render_template('master.html', ids=ids, graphJSON=graphJSON)
+
 
 # web page that handles user query and displays model results
 @app.route('/go')
@@ -129,8 +133,10 @@ def go():
         classification_result=classification_results
     )
 
+
 def main():
     app.run(host='0.0.0.0', port=3001, debug=True)
+
 
 if __name__ == '__main__':
     main()

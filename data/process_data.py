@@ -1,82 +1,69 @@
 import sys
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
 
 def load_data(messages_filepath, categories_filepath):
-    '''
-    INPUT 
-        database_filepath - Filepath used for importing the database     
+    """Load dataframe from filepaths
+
+    INPUT
+    messages_filepath -- str, link to file
+    categories_filepath -- str, link to file
+
     OUTPUT
-        Returns the following variables:
-        X - Returns the input features.  Specifically, this is returning the messages column from the dataset
-        Y - Returns the categories of the dataset.  This will be used for classification based off of the input X
-        y.keys - Just returning the columns of the Y columns
-    '''
+    df - pandas DataFrame
+    """
     messages = pd.read_csv(messages_filepath)
     categories = pd.read_csv(categories_filepath)
-    df = pd.merge(messages, categories)
-    df_temp_id = df['id']
-    return df, df_temp_id
+    df = messages.merge(categories, on='id')
+    return df
 
-def clean_data(df, df_temp_id):
-    '''
-    INPUT 
-        df: Dataframe to be cleaned by the method
-        df_temp_id: the id that is to be used when merging the messages and classifications together based off of the common id
+def clean_data(df):
+    """Clean data included in the DataFrame and transform categories part
+
+    INPUT
+    df -- type pandas DataFrame
+
     OUTPUT
-        df: Returns a cleaned dataframe Returns the following variables:
-    '''
-    categories =  df['categories'].str.split(';', expand=True).add_prefix('categories_')
-    messages = df[['message', 'genre', 'id']]
-    row = categories.iloc[0]
-    category_colnames = list()
-    for x in row:
-        #print(x[0:-2])
-        category_colnames.append(x[0:-2])
+    df -- cleaned pandas DataFrame
+    """
+    categories = df['categories'].str.split(pat=';', expand=True)
+    row = categories.loc[0]
+    colnames = []
+    for entry in row:
+        colnames.append(entry[:-2])
+    category_colnames = colnames
+    print('Column names:', category_colnames)
     categories.columns = category_colnames
     for column in categories:
-        # set each value to be the last character of the string
-        categories[column] =  categories[column].str[-1]
-        # convert column from string to numeric
+        categories[column] = categories[column].str[-1:]
         categories[column] = categories[column].astype(int)
-    # drop the original categories column from `df`
-    df.drop(['categories'], axis=1, inplace = True)
-    # concatenate the original dataframe with the new `categories` dataframe
-    categories['id'] = df['id']
-
-    df = pd.merge(messages, categories)
-    # check number of duplicates
-    print(df.duplicated().sum())
-    # drop duplicates
-    df.drop_duplicates(inplace = True)
-    # check number of duplicates
-    print(df.duplicated().sum())
+    df.drop('categories', axis=1, inplace=True)
+    df = pd.concat([df, categories], axis=1)
+    df.drop_duplicates(inplace=True)
+    # Removing entry that is non-binary
+    df = df[df['related'] != 2]
+    print('Duplicates remaining:', df.duplicated().sum())
     return df
     
 def save_data(df, database_filename):
-    '''
-    INPUT 
-        df: Dataframe to be saved
-        database_filepath - Filepath used for saving the database     
-    OUTPUT
-        Saves the database
-    '''
-    engine = create_engine('sqlite:///data//DisasterResponse.db')
-    df.to_sql('DisasterResponse', engine, index=False)
+    """Saves DataFrame (df) to database path"""
+    name = 'sqlite:///' + database_filename
+    engine = create_engine(name)
+    df.to_sql('Disasters', engine, index=False)
+
 
 def main():
+    """Runs main functions: Loads the data, cleans it and saves it in a database"""
     if len(sys.argv) == 4:
 
         messages_filepath, categories_filepath, database_filepath = sys.argv[1:]
 
         print('Loading data...\n    MESSAGES: {}\n    CATEGORIES: {}'
               .format(messages_filepath, categories_filepath))
-        df, df_temp_index = load_data(messages_filepath, categories_filepath)
+        df = load_data(messages_filepath, categories_filepath)
 
         print('Cleaning data...')
-        df = clean_data(df, df_temp_index)
+        df = clean_data(df)
         
         print('Saving data...\n    DATABASE: {}'.format(database_filepath))
         save_data(df, database_filepath)
